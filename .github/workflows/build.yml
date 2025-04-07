@@ -39,7 +39,7 @@ jobs:
     - name: Install dependencies
       run: npm install
     - name: Pack into zip and create installer
-      run: npm run dist-mac
+      run: npm run pack-mac
     - name: Upload Artifacts
       uses: actions/upload-artifact@master
       with:

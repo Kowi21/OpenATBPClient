@@ -41,6 +41,11 @@ jobs:
       run: npm install
     - name: Pack into zip and create installer
       run: npm run pack-mac
+    - name: create macOS dmg
+      uses: L-Super/create-dmg-actions@v1.0.3
+      with:
+        dmg_name: 'dist/mac/OpenATBPClient'
+        src_dir: 'dist/mac/OpenATBPClient.app'
     - name: Upload Artifacts
       uses: actions/upload-artifact@master
       with:

@@ -9,10 +9,35 @@ var initialPageLoad = false;
 
 app.commandLine.appendSwitch("--enable-npapi");
 
+if (process.platform == "darwin") {
+    var full_osx_version = require("child_process")
+        .execSync("sw_vers -productVersion")
+        .toString()
+        .trim()
+        .split(".");
+    var osx_release =
+        full_osx_version[0] == "10"
+            ? Number(full_osx_version[1])
+            : Number(full_osx_version[0]) + 5; // + 5 to cause Big Sur and up to follow Catalina as they should instead of overlapping El Capitan
+    if (osx_release < 12) {
+        app.commandLine.appendSwitch("--ignore-certificate-errors");
+    }
+}
+
+var utilsdir = __dirname + "/../../utils";
+
+// if running in non-packaged / development mode, this dir will be slightly different
+if (process.env.npm_node_execpath) {
+    utilsdir = __dirname + "/build/utils";
+}
+
 function verifyUnity() {
+    if (os.platform() === "darwin") {
+        return true;
+    }
     var dllpath =
         app.getPath("appData") +
-        "\\..\\LocalLow\\Unity\\WebPlayer\\player\\3.x.x\\webplayer_win.dll";
+        "/../LocalLow/Unity/WebPlayer/player/3.x.x/webplayer_win.dll";
 
     if (fs.existsSync(dllpath)) {
         var buff = fs.readFileSync(dllpath);
@@ -28,16 +53,14 @@ function verifyUnity() {
 }
 
 function installUnity(callback) {
-    var utilsdir = __dirname + "\\..\\..\\utils";
-
-    // if running in non-packaged / development mode, this dir will be slightly different
-    if (process.env.npm_node_execpath) {
-        utilsdir = app.getAppPath() + "\\build\\utils";
+    if (os.platform() === "darwin") {
+        callback();
+        return;
     }
 
     // run the installer silently
     var child = require("child_process").spawn(
-        utilsdir + "\\UnityWebPlayer.exe",
+        utilsdir + "/UnityWebPlayer.exe",
         ["/quiet", "/S"]
     );
     child.on("exit", function () {
@@ -60,13 +83,20 @@ function initialSetup(firstTime) {
         if (firstTime) {
             // Copy default config
             fs.copySync(
-                __dirname + "\\defaults\\config.json",
-                app.getPath("userData") + "\\config.json"
+                __dirname + "/defaults/config.json",
+                app.getPath("userData") + "/config.json"
             );
         }
         setupWindow.destroy();
         showMainWindow();
     });
+}
+
+function zipCheck() {
+    if (os.platform() === "darwin") {
+        return false;
+    }
+    return app.getPath("exe").includes(os.tmpdir());
 }
 
 // Quit when all windows are closed.
@@ -76,8 +106,7 @@ app.on("window-all-closed", function () {
 
 app.on("ready", function () {
     // Check just in case the user forgot to extract the zip.
-    zip_check = app.getPath("exe").includes(os.tmpdir());
-    if (zip_check) {
+    if (zipCheck()) {
         errormsg =
             "It has been detected that OpenATBPClient is running from the TEMP folder.\n\n" +
             "Please extract the entire Client folder to a location of your choice before starting OpenATBPClient.";
@@ -85,17 +114,22 @@ app.on("ready", function () {
         return;
     }
 
+    var prefs = { 'plugins': true };
+
+    if (os.platform() == "darwin") 
+        prefs['extra-plugin-dirs'] = [utilsdir];
+
     // Create the browser window.
     mainWindow = new BrowserWindow({
         width: 1090,
         height: 776,
         show: false,
-        "web-preferences": { plugins: true },
+        "web-preferences": prefs,
     });
     mainWindow.setMinimumSize(640, 480);
 
     // Check for first run
-    var configPath = app.getPath("userData") + "\\config.json";
+    var configPath = app.getPath("userData") + "/config.json";
     try {
         if (!fs.existsSync(configPath)) {
             console.log("Config file not found. Running initial setup.");
@@ -121,7 +155,7 @@ app.on("ready", function () {
 });
 
 function showMainWindow() {
-    var configPath = app.getPath("userData") + "\\config.json";
+    var configPath = app.getPath("userData") + "/config.json";
     var config = fs.readJsonSync(configPath);
 
     console.log("Game URL:", config["game-url"]);
@@ -145,10 +179,10 @@ function showMainWindow() {
 
     mainWindow.webContents.on("will-navigate", function (evt, url) {
         evt.preventDefault();
-        var configPath = app.getPath("userData") + "\\config.json";
+        var configPath = app.getPath("userData") + "/config.json";
         var config = fs.readJsonSync(configPath);
 
-        if (!url.startsWith(config['game-url'])) {
+        if (!url.startsWith(config["game-url"])) {
             require("shell").openExternal(url);
         } else {
             mainWindow.loadUrl(url);
@@ -158,12 +192,12 @@ function showMainWindow() {
 
     mainWindow.webContents.on("did-fail-load", function () {
         if (!initialPageLoad) {
-          dialog.showErrorBox(
-              "Error!",
-              "Could not load page. Check your Internet connection, and game-url inside config.json."
-          );
-          mainWindow.destroy();
-          app.quit();
+            dialog.showErrorBox(
+                "Error!",
+                "Could not load page. Check your Internet connection, and game-url inside config.json."
+            );
+            mainWindow.destroy();
+            app.quit();
         }
     });
 }
